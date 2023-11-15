@@ -23,10 +23,10 @@
 
 pragma solidity ^0.8.18;
 
-contract DelegationManagementContract {
+contract VulnNFTdelegation {
     // Constant declarations
-    /// Q - Can we use a boolean for this?
-    address constant ALL_COLLECTIONS = 0x8888888888888888888888888888888888888888;
+    address constant ALL_COLLECTIONS =
+        0x8888888888888888888888888888888888888888;
     uint256 constant USE_CASE_SUB_DELEGATION = 998;
     uint256 constant USE_CASE_CONSOLIDATION = 999;
 
@@ -43,7 +43,6 @@ contract DelegationManagementContract {
         uint256 registeredDate;
         uint256 expiryDate;
         bool allTokens;
-        /// Q - Is this supposed to represent a tokenId or a token balance?
         uint256 tokens;
     }
 
@@ -68,7 +67,12 @@ contract DelegationManagementContract {
         bool allTokens,
         uint256 _tokenId
     );
-    event RevokeDelegation(address indexed from, address indexed collectionAddress, address indexed delegationAddress, uint256 useCase);
+    event RevokeDelegation(
+        address indexed from,
+        address indexed collectionAddress,
+        address indexed delegationAddress,
+        uint256 useCase
+    );
     event RevokeDelegationUsingSubDelegation(
         address indexed delegator,
         address from,
@@ -94,6 +98,23 @@ contract DelegationManagementContract {
     // Constructor
     constructor() {
         useCaseCounter = 999;
+
+        /** INSERT EXAMPLE EXPLOIT DATA
+         * In a real world example of this exploit, the attacker would register a delegation
+         * to the bytes32(0) key location inside the globalDelegationHashes mapping
+         * for a target address that has a duplicate delegation.
+         * This would cause the retrieve functions that remove duplicates to panic,
+         * thus allowing the attacker to cause all other legitimate duplicate delegations to be inaccessible.
+         */
+        GlobalData memory newdelegationGlobalData = GlobalData(
+            0x70997970C51812dc3A010C7d01b50e0d17dc79C8,
+            0x90F79bf6EB2c4f870365E785982E1f101E93b906,
+            block.timestamp,
+            block.timestamp + 100 days,
+            true,
+            0
+        );
+        globalDelegationHashes[bytes32(0)].push(newdelegationGlobalData);
     }
 
     /**
@@ -118,24 +139,48 @@ contract DelegationManagementContract {
         bytes32 collectionUsecaseLockHash;
         bytes32 collectionUsecaseLockHashAll;
         // Locks
-        collectionLockHash = keccak256(abi.encodePacked(_collectionAddress, _delegationAddress));
-        collectionUsecaseLockHash = keccak256(abi.encodePacked(_collectionAddress, _delegationAddress, _useCase));
-        collectionUsecaseLockHashAll = keccak256(abi.encodePacked(ALL_COLLECTIONS, _delegationAddress, _useCase));
+        collectionLockHash = keccak256(
+            abi.encodePacked(_collectionAddress, _delegationAddress)
+        );
+        collectionUsecaseLockHash = keccak256(
+            abi.encodePacked(_collectionAddress, _delegationAddress, _useCase)
+        );
+        collectionUsecaseLockHashAll = keccak256(
+            abi.encodePacked(ALL_COLLECTIONS, _delegationAddress, _useCase)
+        );
         require(globalLock[_delegationAddress] == false);
         require(collectionLock[collectionLockHash] == false);
         require(collectionUsecaseLock[collectionUsecaseLockHash] == false);
         require(collectionUsecaseLock[collectionUsecaseLockHashAll] == false);
         // Push data to mappings
-        globalHash = keccak256(abi.encodePacked(msg.sender, _collectionAddress, _delegationAddress, _useCase));
-        delegatorHash = keccak256(abi.encodePacked(msg.sender, _collectionAddress, _useCase));
+        globalHash = keccak256(
+            abi.encodePacked(
+                msg.sender,
+                _collectionAddress,
+                _delegationAddress,
+                _useCase
+            )
+        );
+        delegatorHash = keccak256(
+            abi.encodePacked(msg.sender, _collectionAddress, _useCase)
+        );
         // Stores delegation addresses on a delegator hash
-        delegationAddressHash = keccak256(abi.encodePacked(_delegationAddress, _collectionAddress, _useCase));
+        delegationAddressHash = keccak256(
+            abi.encodePacked(_delegationAddress, _collectionAddress, _useCase)
+        );
         delegatorHashes[delegatorHash].push(_delegationAddress);
         // Stores delegators addresses on a delegation address hash
         delegationAddressHashes[delegationAddressHash].push(msg.sender);
         // Push additional data to the globalDelegationHashes mapping
         if (_allTokens == true) {
-            GlobalData memory newdelegationGlobalData = GlobalData(msg.sender, _delegationAddress, block.timestamp, _expiryDate, true, 0);
+            GlobalData memory newdelegationGlobalData = GlobalData(
+                msg.sender,
+                _delegationAddress,
+                block.timestamp,
+                _expiryDate,
+                true,
+                0
+            );
             globalDelegationHashes[globalHash].push(newdelegationGlobalData);
         } else {
             GlobalData memory newdelegationGlobalData = GlobalData(
@@ -148,7 +193,14 @@ contract DelegationManagementContract {
             );
             globalDelegationHashes[globalHash].push(newdelegationGlobalData);
         }
-        emit RegisterDelegation(msg.sender, _collectionAddress, _delegationAddress, _useCase, _allTokens, _tokenId);
+        emit RegisterDelegation(
+            msg.sender,
+            _collectionAddress,
+            _delegationAddress,
+            _useCase,
+            _allTokens,
+            _tokenId
+        );
     }
 
     /**
@@ -168,8 +220,11 @@ contract DelegationManagementContract {
         // Check subdelegation rights for the specific collection
         {
             bool subdelegationRightsCol;
-            address[] memory allDelegators = retrieveDelegators(msg.sender, _collectionAddress, USE_CASE_SUB_DELEGATION);
-            /// Q - Is this if statement necessary
+            address[] memory allDelegators = retrieveDelegators(
+                msg.sender,
+                _collectionAddress,
+                USE_CASE_SUB_DELEGATION
+            );
             if (allDelegators.length > 0) {
                 for (uint i = 0; i < allDelegators.length; ) {
                     if (_delegatorAddress == allDelegators[i]) {
@@ -182,9 +237,12 @@ contract DelegationManagementContract {
                     }
                 }
             }
-            /// Q - Can we check subdelegationRightsCol is false before calling retrieveDelegators on all collections? This seems like a waste of gas
             // Check subdelegation rights for All collections
-            allDelegators = retrieveDelegators(msg.sender, ALL_COLLECTIONS, USE_CASE_SUB_DELEGATION);
+            allDelegators = retrieveDelegators(
+                msg.sender,
+                ALL_COLLECTIONS,
+                USE_CASE_SUB_DELEGATION
+            );
             if (allDelegators.length > 0) {
                 if (subdelegationRightsCol != true) {
                     for (uint i = 0; i < allDelegators.length; ) {
@@ -202,7 +260,6 @@ contract DelegationManagementContract {
             // Allow to register
             require((subdelegationRightsCol == true));
         }
-        /// @review (informational) - Move less gas intensive requires to the beginning of the function, and reduce gas for reverted transactions
         // If check passed then register delegation address for Delegator
         require((_useCase > 0 && _useCase <= useCaseCounter));
         bytes32 delegatorHash;
@@ -212,18 +269,35 @@ contract DelegationManagementContract {
         bytes32 collectionUsecaseLockHash;
         bytes32 collectionUsecaseLockHashAll;
         // Locks
-        collectionLockHash = keccak256(abi.encodePacked(_collectionAddress, _delegationAddress));
-        collectionUsecaseLockHash = keccak256(abi.encodePacked(_collectionAddress, _delegationAddress, _useCase));
-        collectionUsecaseLockHashAll = keccak256(abi.encodePacked(ALL_COLLECTIONS, _delegationAddress, _useCase));
+        collectionLockHash = keccak256(
+            abi.encodePacked(_collectionAddress, _delegationAddress)
+        );
+        collectionUsecaseLockHash = keccak256(
+            abi.encodePacked(_collectionAddress, _delegationAddress, _useCase)
+        );
+        collectionUsecaseLockHashAll = keccak256(
+            abi.encodePacked(ALL_COLLECTIONS, _delegationAddress, _useCase)
+        );
         require(globalLock[_delegationAddress] == false);
         require(collectionLock[collectionLockHash] == false);
         require(collectionUsecaseLock[collectionUsecaseLockHash] == false);
         require(collectionUsecaseLock[collectionUsecaseLockHashAll] == false);
         // Push data to mappings
-        globalHash = keccak256(abi.encodePacked(_delegatorAddress, _collectionAddress, _delegationAddress, _useCase));
-        delegatorHash = keccak256(abi.encodePacked(_delegatorAddress, _collectionAddress, _useCase));
+        globalHash = keccak256(
+            abi.encodePacked(
+                _delegatorAddress,
+                _collectionAddress,
+                _delegationAddress,
+                _useCase
+            )
+        );
+        delegatorHash = keccak256(
+            abi.encodePacked(_delegatorAddress, _collectionAddress, _useCase)
+        );
         // Stores delegation addresses on a delegator hash
-        delegationAddressHash = keccak256(abi.encodePacked(_delegationAddress, _collectionAddress, _useCase));
+        delegationAddressHash = keccak256(
+            abi.encodePacked(_delegationAddress, _collectionAddress, _useCase)
+        );
         delegatorHashes[delegatorHash].push(_delegationAddress);
         // Stores delegators addresses on a delegation address hash
         delegationAddressHashes[delegationAddressHash].push(_delegatorAddress);
@@ -265,14 +339,29 @@ contract DelegationManagementContract {
      * @notice This function does not remove the delegation from the collectionsRegistered or useCaseRegistered as we want to track delegations history
      */
 
-    function revokeDelegationAddress(address _collectionAddress, address _delegationAddress, uint256 _useCase) public {
+    function revokeDelegationAddress(
+        address _collectionAddress,
+        address _delegationAddress,
+        uint256 _useCase
+    ) public {
         bytes32 delegatorHash;
         bytes32 delegationAddressHash;
         bytes32 globalHash;
         uint256 count;
-        globalHash = keccak256(abi.encodePacked(msg.sender, _collectionAddress, _delegationAddress, _useCase));
-        delegatorHash = keccak256(abi.encodePacked(msg.sender, _collectionAddress, _useCase));
-        delegationAddressHash = keccak256(abi.encodePacked(_delegationAddress, _collectionAddress, _useCase));
+        globalHash = keccak256(
+            abi.encodePacked(
+                msg.sender,
+                _collectionAddress,
+                _delegationAddress,
+                _useCase
+            )
+        );
+        delegatorHash = keccak256(
+            abi.encodePacked(msg.sender, _collectionAddress, _useCase)
+        );
+        delegationAddressHash = keccak256(
+            abi.encodePacked(_delegationAddress, _collectionAddress, _useCase)
+        );
         // Revoke delegation Address from the delegatorHashes mapping
         count = 0;
         if (delegatorHashes[delegatorHash].length > 0) {
@@ -297,14 +386,18 @@ contract DelegationManagementContract {
                     ++i;
                 }
             }
-            /// Q - Is this if statement necessary
+
             if (count1 > 0) {
                 for (uint256 j = 0; j < delegationsPerUser.length; ) {
                     uint256 temp1;
                     uint256 temp2;
-                    temp1 = delegationsPerUser[delegationsPerUser.length - 1 - j];
+                    temp1 = delegationsPerUser[
+                        delegationsPerUser.length - 1 - j
+                    ];
                     temp2 = delegatorHashes[delegatorHash].length - 1;
-                    delegatorHashes[delegatorHash][temp1] = delegatorHashes[delegatorHash][temp2];
+                    delegatorHashes[delegatorHash][temp1] = delegatorHashes[
+                        delegatorHash
+                    ][temp2];
                     delegatorHashes[delegatorHash].pop();
 
                     unchecked {
@@ -314,8 +407,15 @@ contract DelegationManagementContract {
             }
             // Revoke delegator Address from the delegationAddressHashes mapping
             uint256 countDA = 0;
-            for (uint256 i = 0; i < delegationAddressHashes[delegationAddressHash].length; ) {
-                if (msg.sender == delegationAddressHashes[delegationAddressHash][i]) {
+            for (
+                uint256 i = 0;
+                i < delegationAddressHashes[delegationAddressHash].length;
+
+            ) {
+                if (
+                    msg.sender ==
+                    delegationAddressHashes[delegationAddressHash][i]
+                ) {
                     countDA = countDA + 1;
                 }
 
@@ -325,9 +425,15 @@ contract DelegationManagementContract {
             }
             uint256[] memory delegatorsPerUser = new uint256[](countDA);
             uint256 countDA1 = 0;
+            for (
+                uint256 i = 0;
+                i < delegationAddressHashes[delegationAddressHash].length;
 
-            for (uint256 i = 0; i < delegationAddressHashes[delegationAddressHash].length; ) {
-                if (msg.sender == delegationAddressHashes[delegationAddressHash][i]) {
+            ) {
+                if (
+                    msg.sender ==
+                    delegationAddressHashes[delegationAddressHash][i]
+                ) {
                     delegatorsPerUser[countDA1] = i;
                     countDA1 = countDA1 + 1;
                 }
@@ -336,14 +442,17 @@ contract DelegationManagementContract {
                     ++i;
                 }
             }
-            /// Q - Is this if statement necessary
             if (countDA1 > 0) {
                 for (uint256 j = 0; j < delegatorsPerUser.length; ) {
                     uint256 temp1;
                     uint256 temp2;
                     temp1 = delegatorsPerUser[delegatorsPerUser.length - 1 - j];
-                    temp2 = delegationAddressHashes[delegationAddressHash].length - 1;
-                    delegationAddressHashes[delegationAddressHash][temp1] = delegationAddressHashes[delegationAddressHash][temp2];
+                    temp2 =
+                        delegationAddressHashes[delegationAddressHash].length -
+                        1;
+                    delegationAddressHashes[delegationAddressHash][
+                        temp1
+                    ] = delegationAddressHashes[delegationAddressHash][temp2];
                     delegationAddressHashes[delegationAddressHash].pop();
 
                     unchecked {
@@ -353,7 +462,12 @@ contract DelegationManagementContract {
             }
             // Delete global delegation data and emit event
             delete globalDelegationHashes[globalHash];
-            emit RevokeDelegation(msg.sender, _collectionAddress, _delegationAddress, _useCase);
+            emit RevokeDelegation(
+                msg.sender,
+                _collectionAddress,
+                _delegationAddress,
+                _useCase
+            );
         }
     }
 
@@ -370,8 +484,11 @@ contract DelegationManagementContract {
         // Check subdelegation rights for the specific collection
         {
             bool subdelegationRightsCol;
-            address[] memory allDelegators = retrieveDelegators(msg.sender, _collectionAddress, USE_CASE_SUB_DELEGATION);
-            /// Q - Is this if statement necessary
+            address[] memory allDelegators = retrieveDelegators(
+                msg.sender,
+                _collectionAddress,
+                USE_CASE_SUB_DELEGATION
+            );
             if (allDelegators.length > 0) {
                 for (uint i = 0; i < allDelegators.length; ) {
                     if (_delegatorAddress == allDelegators[i]) {
@@ -384,9 +501,12 @@ contract DelegationManagementContract {
                     }
                 }
             }
-            /// Q - Can we check subdelegationRightsCol is false before calling retrieveDelegators on all collections? This seems like a waste of gas
             // Check subdelegation rights for All collections
-            allDelegators = retrieveDelegators(msg.sender, ALL_COLLECTIONS, USE_CASE_SUB_DELEGATION);
+            allDelegators = retrieveDelegators(
+                msg.sender,
+                ALL_COLLECTIONS,
+                USE_CASE_SUB_DELEGATION
+            );
             if (allDelegators.length > 0) {
                 if (subdelegationRightsCol != true) {
                     for (uint i = 0; i < allDelegators.length; ) {
@@ -405,9 +525,20 @@ contract DelegationManagementContract {
             require((subdelegationRightsCol == true));
         }
         // If check passed then revoke delegation address for Delegator
-        bytes32 delegatorHash = keccak256(abi.encodePacked(_delegatorAddress, _collectionAddress, _useCase));
-        bytes32 delegationAddressHash = keccak256(abi.encodePacked(_delegationAddress, _collectionAddress, _useCase));
-        bytes32 globalHash = keccak256(abi.encodePacked(_delegatorAddress, _collectionAddress, _delegationAddress, _useCase));
+        bytes32 delegatorHash = keccak256(
+            abi.encodePacked(_delegatorAddress, _collectionAddress, _useCase)
+        );
+        bytes32 delegationAddressHash = keccak256(
+            abi.encodePacked(_delegationAddress, _collectionAddress, _useCase)
+        );
+        bytes32 globalHash = keccak256(
+            abi.encodePacked(
+                _delegatorAddress,
+                _collectionAddress,
+                _delegationAddress,
+                _useCase
+            )
+        );
         uint256 count;
         count = 0;
         if (delegatorHashes[delegatorHash].length > 0) {
@@ -422,7 +553,6 @@ contract DelegationManagementContract {
             }
             uint256[] memory delegationsPerUser = new uint256[](count);
             uint256 count1 = 0;
-
             for (uint256 i = 0; i < delegatorHashes[delegatorHash].length; ) {
                 if (_delegationAddress == delegatorHashes[delegatorHash][i]) {
                     delegationsPerUser[count1] = i;
@@ -433,14 +563,17 @@ contract DelegationManagementContract {
                     ++i;
                 }
             }
-            /// Q - Is this if statement necessary
             if (count1 > 0) {
                 for (uint256 j = 0; j < delegationsPerUser.length; ) {
                     uint256 temp1;
                     uint256 temp2;
-                    temp1 = delegationsPerUser[delegationsPerUser.length - 1 - j];
+                    temp1 = delegationsPerUser[
+                        delegationsPerUser.length - 1 - j
+                    ];
                     temp2 = delegatorHashes[delegatorHash].length - 1;
-                    delegatorHashes[delegatorHash][temp1] = delegatorHashes[delegatorHash][temp2];
+                    delegatorHashes[delegatorHash][temp1] = delegatorHashes[
+                        delegatorHash
+                    ][temp2];
                     delegatorHashes[delegatorHash].pop();
 
                     unchecked {
@@ -450,8 +583,15 @@ contract DelegationManagementContract {
             }
             // Revoke delegator Address from the delegationAddressHashes mapping
             uint256 countDA = 0;
-            for (uint256 i = 0; i < delegationAddressHashes[delegationAddressHash].length; ) {
-                if (_delegatorAddress == delegationAddressHashes[delegationAddressHash][i]) {
+            for (
+                uint256 i = 0;
+                i < delegationAddressHashes[delegationAddressHash].length;
+
+            ) {
+                if (
+                    _delegatorAddress ==
+                    delegationAddressHashes[delegationAddressHash][i]
+                ) {
                     countDA = countDA + 1;
                 }
 
@@ -461,9 +601,15 @@ contract DelegationManagementContract {
             }
             uint256[] memory delegatorsPerUser = new uint256[](countDA);
             uint256 countDA1 = 0;
+            for (
+                uint256 i = 0;
+                i < delegationAddressHashes[delegationAddressHash].length;
 
-            for (uint256 i = 0; i < delegationAddressHashes[delegationAddressHash].length; ) {
-                if (_delegatorAddress == delegationAddressHashes[delegationAddressHash][i]) {
+            ) {
+                if (
+                    _delegatorAddress ==
+                    delegationAddressHashes[delegationAddressHash][i]
+                ) {
                     delegatorsPerUser[countDA1] = i;
                     countDA1 = countDA1 + 1;
                 }
@@ -477,8 +623,12 @@ contract DelegationManagementContract {
                     uint256 temp1;
                     uint256 temp2;
                     temp1 = delegatorsPerUser[delegatorsPerUser.length - 1 - j];
-                    temp2 = delegationAddressHashes[delegationAddressHash].length - 1;
-                    delegationAddressHashes[delegationAddressHash][temp1] = delegationAddressHashes[delegationAddressHash][temp2];
+                    temp2 =
+                        delegationAddressHashes[delegationAddressHash].length -
+                        1;
+                    delegationAddressHashes[delegationAddressHash][
+                        temp1
+                    ] = delegationAddressHashes[delegationAddressHash][temp2];
                     delegationAddressHashes[delegationAddressHash].pop();
 
                     unchecked {
@@ -488,7 +638,13 @@ contract DelegationManagementContract {
             }
             // Delete global delegation data and emit event
             delete globalDelegationHashes[globalHash];
-            emit RevokeDelegationUsingSubDelegation(_delegatorAddress, msg.sender, _collectionAddress, _delegationAddress, _useCase);
+            emit RevokeDelegationUsingSubDelegation(
+                _delegatorAddress,
+                msg.sender,
+                _collectionAddress,
+                _delegationAddress,
+                _useCase
+            );
         }
     }
 
@@ -503,7 +659,11 @@ contract DelegationManagementContract {
     ) public {
         require(_collectionAddresses.length < 6);
         for (uint256 i = 0; i < _collectionAddresses.length; ) {
-            revokeDelegationAddress(_collectionAddresses[i], _delegationAddresses[i], _useCases[i]);
+            revokeDelegationAddress(
+                _collectionAddresses[i],
+                _delegationAddresses[i],
+                _useCases[i]
+            );
 
             unchecked {
                 ++i;
@@ -517,18 +677,35 @@ contract DelegationManagementContract {
 
     function updateDelegationAddress(
         address _collectionAddress,
-        /// @nit - parameter capitalization
         address _olddelegationAddress,
-        /// @nit - parameter capitalization
         address _newdelegationAddress,
         uint256 _expiryDate,
         uint256 _useCase,
         bool _allTokens,
         uint256 _tokenId
     ) public {
-        revokeDelegationAddress(_collectionAddress, _olddelegationAddress, _useCase);
-        registerDelegationAddress(_collectionAddress, _newdelegationAddress, _expiryDate, _useCase, _allTokens, _tokenId);
-        emit UpdateDelegation(msg.sender, _collectionAddress, _olddelegationAddress, _newdelegationAddress, _useCase, _allTokens, _tokenId);
+        revokeDelegationAddress(
+            _collectionAddress,
+            _olddelegationAddress,
+            _useCase
+        );
+        registerDelegationAddress(
+            _collectionAddress,
+            _newdelegationAddress,
+            _expiryDate,
+            _useCase,
+            _allTokens,
+            _tokenId
+        );
+        emit UpdateDelegation(
+            msg.sender,
+            _collectionAddress,
+            _olddelegationAddress,
+            _newdelegationAddress,
+            _useCase,
+            _allTokens,
+            _tokenId
+        );
     }
 
     /**
@@ -572,11 +749,16 @@ contract DelegationManagementContract {
      * @notice Set collection Lock status (hot wallet)
      */
 
-    function setCollectionLock(address _collectionAddress, bool _status) public {
+    function setCollectionLock(
+        address _collectionAddress,
+        bool _status
+    ) public {
         if (_collectionAddress == ALL_COLLECTIONS) {
             setGlobalLock(_status);
         } else {
-            bytes32 collectionLockHash = keccak256(abi.encodePacked(_collectionAddress, msg.sender));
+            bytes32 collectionLockHash = keccak256(
+                abi.encodePacked(_collectionAddress, msg.sender)
+            );
             collectionLock[collectionLockHash] = _status;
         }
     }
@@ -585,11 +767,17 @@ contract DelegationManagementContract {
      * @notice Set collection usecase Lock status (hot wallet)
      */
 
-    function setCollectionUsecaseLock(address _collectionAddress, uint256 _useCase, bool _status) public {
+    function setCollectionUsecaseLock(
+        address _collectionAddress,
+        uint256 _useCase,
+        bool _status
+    ) public {
         if (_useCase == 1) {
             setCollectionLock(_collectionAddress, _status);
         } else {
-            bytes32 collectionUsecaseLockHash = keccak256(abi.encodePacked(_collectionAddress, msg.sender, _useCase));
+            bytes32 collectionUsecaseLockHash = keccak256(
+                abi.encodePacked(_collectionAddress, msg.sender, _useCase)
+            );
             collectionUsecaseLock[collectionUsecaseLockHash] = _status;
         }
     }
@@ -608,7 +796,9 @@ contract DelegationManagementContract {
      * @notice Retrieve Global Lock Status
      */
 
-    function retrieveGlobalLockStatus(address _delegationAddress) public view returns (bool) {
+    function retrieveGlobalLockStatus(
+        address _delegationAddress
+    ) public view returns (bool) {
         return globalLock[_delegationAddress];
     }
 
@@ -616,12 +806,17 @@ contract DelegationManagementContract {
      * @notice Retrieve Collection Lock Status
      */
 
-    function retrieveCollectionLockStatus(address _collectionAddress, address _delegationAddress) public view returns (bool) {
+    function retrieveCollectionLockStatus(
+        address _collectionAddress,
+        address _delegationAddress
+    ) public view returns (bool) {
         if (_collectionAddress == ALL_COLLECTIONS) {
             return retrieveGlobalLockStatus(_delegationAddress);
         } else {
             bytes32 collectionLockHash;
-            collectionLockHash = keccak256(abi.encodePacked(_collectionAddress, _delegationAddress));
+            collectionLockHash = keccak256(
+                abi.encodePacked(_collectionAddress, _delegationAddress)
+            );
             return collectionLock[collectionLockHash];
         }
     }
@@ -636,10 +831,20 @@ contract DelegationManagementContract {
         uint256 _useCase
     ) public view returns (bool) {
         if (_useCase == 1) {
-            return retrieveCollectionLockStatus(_collectionAddress, _delegationAddress);
+            return
+                retrieveCollectionLockStatus(
+                    _collectionAddress,
+                    _delegationAddress
+                );
         } else {
             bytes32 collectionUsecaseLockHash;
-            collectionUsecaseLockHash = keccak256(abi.encodePacked(_collectionAddress, _delegationAddress, _useCase));
+            collectionUsecaseLockHash = keccak256(
+                abi.encodePacked(
+                    _collectionAddress,
+                    _delegationAddress,
+                    _useCase
+                )
+            );
             return collectionUsecaseLock[collectionUsecaseLockHash];
         }
     }
@@ -654,11 +859,23 @@ contract DelegationManagementContract {
         uint256 _useCase
     ) public view returns (bool) {
         if (_useCase == 1) {
-            return retrieveCollectionLockStatus(_collectionAddress, _delegationAddress);
+            return
+                retrieveCollectionLockStatus(
+                    _collectionAddress,
+                    _delegationAddress
+                );
         } else {
             return
-                retrieveCollectionUseCaseLockStatus(_collectionAddress, _delegationAddress, _useCase) ||
-                retrieveCollectionUseCaseLockStatus(ALL_COLLECTIONS, _delegationAddress, _useCase);
+                retrieveCollectionUseCaseLockStatus(
+                    _collectionAddress,
+                    _delegationAddress,
+                    _useCase
+                ) ||
+                retrieveCollectionUseCaseLockStatus(
+                    ALL_COLLECTIONS,
+                    _delegationAddress,
+                    _useCase
+                );
         }
     }
 
@@ -666,9 +883,15 @@ contract DelegationManagementContract {
      * @notice Support function to retrieve the hash given specific parameters
      */
 
-    function retrieveLocalHash(address _walletAddress, address _collectionAddress, uint256 _useCase) public pure returns (bytes32) {
+    function retrieveLocalHash(
+        address _walletAddress,
+        address _collectionAddress,
+        uint256 _useCase
+    ) public pure returns (bytes32) {
         bytes32 hash;
-        hash = keccak256(abi.encodePacked(_walletAddress, _collectionAddress, _useCase));
+        hash = keccak256(
+            abi.encodePacked(_walletAddress, _collectionAddress, _useCase)
+        );
         return (hash);
     }
 
@@ -683,7 +906,14 @@ contract DelegationManagementContract {
         uint256 _useCase
     ) public pure returns (bytes32) {
         bytes32 globalHash;
-        globalHash = keccak256(abi.encodePacked(_delegatorAddress, _collectionAddress, _delegationAddress, _useCase));
+        globalHash = keccak256(
+            abi.encodePacked(
+                _delegatorAddress,
+                _collectionAddress,
+                _delegationAddress,
+                _useCase
+            )
+        );
         return (globalHash);
     }
 
@@ -697,7 +927,9 @@ contract DelegationManagementContract {
         uint256 _useCase
     ) public view returns (address[] memory) {
         bytes32 hash;
-        hash = keccak256(abi.encodePacked(_delegatorAddress, _collectionAddress, _useCase));
+        hash = keccak256(
+            abi.encodePacked(_delegatorAddress, _collectionAddress, _useCase)
+        );
         return (delegatorHashes[hash]);
     }
 
@@ -711,7 +943,9 @@ contract DelegationManagementContract {
         uint256 _useCase
     ) public view returns (address[] memory) {
         bytes32 hash;
-        hash = keccak256(abi.encodePacked(_delegationAddress, _collectionAddress, _useCase));
+        hash = keccak256(
+            abi.encodePacked(_delegationAddress, _collectionAddress, _useCase)
+        );
         return (delegationAddressHashes[hash]);
     }
 
@@ -726,7 +960,9 @@ contract DelegationManagementContract {
         uint256 _useCase
     ) public view returns (bool) {
         bytes32 hash;
-        hash = keccak256(abi.encodePacked(_delegatorAddress, _collectionAddress, _useCase));
+        hash = keccak256(
+            abi.encodePacked(_delegatorAddress, _collectionAddress, _useCase)
+        );
         return delegatorHashes[hash].length > 0;
     }
 
@@ -741,7 +977,9 @@ contract DelegationManagementContract {
         uint256 _useCase
     ) public view returns (bool) {
         bytes32 hash;
-        hash = keccak256(abi.encodePacked(_delegationAddress, _collectionAddress, _useCase));
+        hash = keccak256(
+            abi.encodePacked(_delegationAddress, _collectionAddress, _useCase)
+        );
         return delegationAddressHashes[hash].length > 0;
     }
 
@@ -756,7 +994,14 @@ contract DelegationManagementContract {
         uint256 _useCase
     ) public view returns (bool) {
         bytes32 hash;
-        hash = keccak256(abi.encodePacked(_delegatorAddress, _collectionAddress, _delegationAddress, _useCase));
+        hash = keccak256(
+            abi.encodePacked(
+                _delegatorAddress,
+                _collectionAddress,
+                _delegationAddress,
+                _useCase
+            )
+        );
         return globalDelegationHashes[hash].length > 0;
     }
 
@@ -772,12 +1017,21 @@ contract DelegationManagementContract {
         uint256 _tokenId
     ) public view returns (bool) {
         bytes32 hash;
-        hash = keccak256(abi.encodePacked(_delegatorAddress, _collectionAddress, _delegationAddress, _useCase));
+        hash = keccak256(
+            abi.encodePacked(
+                _delegatorAddress,
+                _collectionAddress,
+                _delegationAddress,
+                _useCase
+            )
+        );
         bool status;
-        /// Q - Is this if statement necessary
         if (globalDelegationHashes[hash].length > 0) {
             for (uint256 i = 0; i < globalDelegationHashes[hash].length; ) {
-                if ((globalDelegationHashes[hash][i].allTokens == false) && (globalDelegationHashes[hash][i].tokens == _tokenId)) {
+                if (
+                    (globalDelegationHashes[hash][i].allTokens == false) &&
+                    (globalDelegationHashes[hash][i].tokens == _tokenId)
+                ) {
                     status = true;
                     break;
                 } else {
@@ -804,7 +1058,13 @@ contract DelegationManagementContract {
         address _delegationAddress,
         uint256 _useCase
     ) public view returns (bool) {
-        return _delegationAddress == retrieveMostRecentDelegation(_delegatorAddress, _collectionAddress, _useCase);
+        return
+            _delegationAddress ==
+            retrieveMostRecentDelegation(
+                _delegatorAddress,
+                _collectionAddress,
+                _useCase
+            );
     }
 
     /**
@@ -817,8 +1077,11 @@ contract DelegationManagementContract {
         address _delegationAddress
     ) public view returns (bool) {
         bool subdelegationRights;
-        address[] memory allDelegators = retrieveDelegators(_delegationAddress, _collectionAddress, USE_CASE_SUB_DELEGATION);
-        /// Q - Is this if statement necessary
+        address[] memory allDelegators = retrieveDelegators(
+            _delegationAddress,
+            _collectionAddress,
+            USE_CASE_SUB_DELEGATION
+        );
         if (allDelegators.length > 0) {
             for (uint i = 0; i < allDelegators.length; ) {
                 if (_delegatorAddress == allDelegators[i]) {
@@ -831,7 +1094,6 @@ contract DelegationManagementContract {
                 }
             }
         }
-        /// Q - Is this if statement necessary
         if (subdelegationRights == true) {
             return (true);
         } else {
@@ -850,9 +1112,13 @@ contract DelegationManagementContract {
         uint256 _date,
         uint256 _useCase
     ) public view returns (bool) {
-        address[] memory allActiveDelegators = retrieveActiveDelegators(_delegationAddress, _collectionAddress, _date, _useCase);
+        address[] memory allActiveDelegators = retrieveActiveDelegators(
+            _delegationAddress,
+            _collectionAddress,
+            _date,
+            _useCase
+        );
         bool status;
-        /// Q - Is this if statement necessary
         if (allActiveDelegators.length > 0) {
             for (uint256 i = 0; i < allActiveDelegators.length; ) {
                 if (_delegatorAddress == allActiveDelegators[i]) {
@@ -879,8 +1145,21 @@ contract DelegationManagementContract {
         address _delegatorAddress,
         address _collectionAddress,
         uint256 _useCase
-    ) public view returns (address[] memory, uint256[] memory, bool[] memory, uint256[] memory) {
-        address[] memory allDelegations = retrieveDelegationAddresses(_delegatorAddress, _collectionAddress, _useCase);
+    )
+        public
+        view
+        returns (
+            address[] memory,
+            uint256[] memory,
+            bool[] memory,
+            uint256[] memory
+        )
+    {
+        address[] memory allDelegations = retrieveDelegationAddresses(
+            _delegatorAddress,
+            _collectionAddress,
+            _useCase
+        );
         bytes32 globalHash;
         bytes32[] memory allGlobalHashes = new bytes32[](allDelegations.length);
         uint256 count1 = 0;
@@ -888,7 +1167,14 @@ contract DelegationManagementContract {
         uint256 k = 0;
         if (allDelegations.length > 0) {
             for (uint256 i = 0; i < allDelegations.length; ) {
-                globalHash = keccak256(abi.encodePacked(_delegatorAddress, _collectionAddress, allDelegations[i], _useCase));
+                globalHash = keccak256(
+                    abi.encodePacked(
+                        _delegatorAddress,
+                        _collectionAddress,
+                        allDelegations[i],
+                        _useCase
+                    )
+                );
                 allGlobalHashes[count1] = globalHash;
                 count1 = count1 + 1;
 
@@ -902,7 +1188,6 @@ contract DelegationManagementContract {
                     if (allGlobalHashes[i] == allGlobalHashes[j]) {
                         delete allGlobalHashes[i];
                     }
-
                     unchecked {
                         ++j;
                     }
@@ -919,19 +1204,31 @@ contract DelegationManagementContract {
                     ++i;
                 }
             }
+
             //Declare local arrays
             address[] memory allDelegationAddresses = new address[](k);
             uint256[] memory tokensIDs = new uint256[](k);
             bool[] memory allTokens = new bool[](k);
             uint256[] memory allExpirations = new uint256[](k);
             for (uint256 y = 0; y < k; ) {
-                /// Q - Is this if statement necessary
                 if (globalDelegationHashes[allGlobalHashes[y]].length > 0) {
-                    for (uint256 w = 0; w < globalDelegationHashes[allGlobalHashes[y]].length; ) {
-                        allDelegationAddresses[count2] = globalDelegationHashes[allGlobalHashes[y]][w].delegationAddress;
-                        allExpirations[count2] = globalDelegationHashes[allGlobalHashes[y]][w].expiryDate;
-                        allTokens[count2] = globalDelegationHashes[allGlobalHashes[y]][w].allTokens;
-                        tokensIDs[count2] = globalDelegationHashes[allGlobalHashes[y]][w].tokens;
+                    for (
+                        uint256 w = 0;
+                        w < globalDelegationHashes[allGlobalHashes[y]].length;
+
+                    ) {
+                        allDelegationAddresses[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].delegationAddress;
+                        allExpirations[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].expiryDate;
+                        allTokens[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].allTokens;
+                        tokensIDs[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].tokens;
                         count2 = count2 + 1;
 
                         unchecked {
@@ -944,7 +1241,12 @@ contract DelegationManagementContract {
                     ++y;
                 }
             }
-            return (allDelegationAddresses, allExpirations, allTokens, tokensIDs);
+            return (
+                allDelegationAddresses,
+                allExpirations,
+                allTokens,
+                tokensIDs
+            );
         } else {
             address[] memory allDelegations1 = new address[](0);
             uint256[] memory tokensIDs = new uint256[](0);
@@ -964,7 +1266,11 @@ contract DelegationManagementContract {
         uint256 _date,
         uint256 _useCase
     ) public view returns (address[] memory) {
-        address[] memory allDelegations = retrieveDelegationAddresses(_delegatorAddress, _collectionAddress, _useCase);
+        address[] memory allDelegations = retrieveDelegationAddresses(
+            _delegatorAddress,
+            _collectionAddress,
+            _useCase
+        );
         bytes32 globalHash;
         bytes32[] memory allGlobalHashes = new bytes32[](allDelegations.length);
         uint256 count1 = 0;
@@ -973,7 +1279,14 @@ contract DelegationManagementContract {
         uint256 k = 0;
         if (allDelegations.length > 0) {
             for (uint256 i = 0; i < allDelegations.length; ) {
-                globalHash = keccak256(abi.encodePacked(_delegatorAddress, _collectionAddress, allDelegations[i], _useCase));
+                globalHash = keccak256(
+                    abi.encodePacked(
+                        _delegatorAddress,
+                        _collectionAddress,
+                        allDelegations[i],
+                        _useCase
+                    )
+                );
                 allGlobalHashes[count1] = globalHash;
                 count1 = count1 + 1;
 
@@ -1008,11 +1321,18 @@ contract DelegationManagementContract {
             address[] memory allDelegationAddresses = new address[](k);
             uint256[] memory allExpirations = new uint256[](k);
             for (uint256 y = 0; y < k; ) {
-                /// Q - Is this if statement necessary
                 if (globalDelegationHashes[allGlobalHashes[y]].length > 0) {
-                    for (uint256 w = 0; w < globalDelegationHashes[allGlobalHashes[y]].length; ) {
-                        allDelegationAddresses[count2] = globalDelegationHashes[allGlobalHashes[y]][w].delegationAddress;
-                        allExpirations[count2] = globalDelegationHashes[allGlobalHashes[y]][w].expiryDate;
+                    for (
+                        uint256 w = 0;
+                        w < globalDelegationHashes[allGlobalHashes[y]].length;
+
+                    ) {
+                        allDelegationAddresses[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].delegationAddress;
+                        allExpirations[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].expiryDate;
                         count2 = count2 + 1;
 
                         unchecked {
@@ -1052,15 +1372,26 @@ contract DelegationManagementContract {
         address _collectionAddress,
         uint256 _useCase
     ) public view returns (address) {
-        address[] memory allDelegations = retrieveDelegationAddresses(_delegatorAddress, _collectionAddress, _useCase);
+        address[] memory allDelegations = retrieveDelegationAddresses(
+            _delegatorAddress,
+            _collectionAddress,
+            _useCase
+        );
         bytes32 globalHash;
         bytes32[] memory allGlobalHashes = new bytes32[](allDelegations.length);
-        uint256 count1 = 0; /// Q - Isn't this variable redundant?
+        uint256 count1 = 0;
         uint256 count2 = 0;
         uint256 k = 0;
         if (allDelegations.length > 0) {
             for (uint256 i = 0; i < allDelegations.length; ) {
-                globalHash = keccak256(abi.encodePacked(_delegatorAddress, _collectionAddress, allDelegations[i], _useCase));
+                globalHash = keccak256(
+                    abi.encodePacked(
+                        _delegatorAddress,
+                        _collectionAddress,
+                        allDelegations[i],
+                        _useCase
+                    )
+                );
                 allGlobalHashes[count1] = globalHash;
                 count1 = count1 + 1;
 
@@ -1069,11 +1400,10 @@ contract DelegationManagementContract {
                 }
             }
             //Removes duplicates
-            /// Q - Can we do this in one loop?
             for (uint256 i = 0; i < allGlobalHashes.length - 1; ) {
                 for (uint256 j = i + 1; j < allGlobalHashes.length; ) {
                     if (allGlobalHashes[i] == allGlobalHashes[j]) {
-                        delete allGlobalHashes[i]; // deleted elements become bytes32(0), there is no shifting of elements
+                        delete allGlobalHashes[i];
                     }
 
                     unchecked {
@@ -1096,11 +1426,18 @@ contract DelegationManagementContract {
             address[] memory allDelegationAddresses = new address[](k);
             uint256[] memory allRegistrations = new uint256[](k);
             for (uint256 y = 0; y < k; ) {
-                /// Q - Is this if statement necessary
                 if (globalDelegationHashes[allGlobalHashes[y]].length > 0) {
-                    for (uint256 w = 0; w < globalDelegationHashes[allGlobalHashes[y]].length; ) {
-                        allDelegationAddresses[count2] = globalDelegationHashes[allGlobalHashes[y]][w].delegationAddress;
-                        allRegistrations[count2] = globalDelegationHashes[allGlobalHashes[y]][w].registeredDate;
+                    for (
+                        uint256 w = 0;
+                        w < globalDelegationHashes[allGlobalHashes[y]].length;
+
+                    ) {
+                        allDelegationAddresses[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].delegationAddress;
+                        allRegistrations[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].registeredDate;
                         count2 = count2 + 1;
 
                         unchecked {
@@ -1142,8 +1479,21 @@ contract DelegationManagementContract {
         address _delegationAddress,
         address _collectionAddress,
         uint256 _useCase
-    ) public view returns (address[] memory, uint256[] memory, bool[] memory, uint256[] memory) {
-        address[] memory allDelegators = retrieveDelegators(_delegationAddress, _collectionAddress, _useCase);
+    )
+        public
+        view
+        returns (
+            address[] memory,
+            uint256[] memory,
+            bool[] memory,
+            uint256[] memory
+        )
+    {
+        address[] memory allDelegators = retrieveDelegators(
+            _delegationAddress,
+            _collectionAddress,
+            _useCase
+        );
         bytes32 globalHash;
         bytes32[] memory allGlobalHashes = new bytes32[](allDelegators.length);
         uint256 count1 = 0;
@@ -1151,7 +1501,14 @@ contract DelegationManagementContract {
         uint256 k = 0;
         if (allDelegators.length > 0) {
             for (uint256 i = 0; i < allDelegators.length; ) {
-                globalHash = keccak256(abi.encodePacked(allDelegators[i], _collectionAddress, _delegationAddress, _useCase));
+                globalHash = keccak256(
+                    abi.encodePacked(
+                        allDelegators[i],
+                        _collectionAddress,
+                        _delegationAddress,
+                        _useCase
+                    )
+                );
                 allGlobalHashes[count1] = globalHash;
                 count1 = count1 + 1;
 
@@ -1188,13 +1545,24 @@ contract DelegationManagementContract {
             bool[] memory allTokens = new bool[](k);
             uint256[] memory allExpirations = new uint256[](k);
             for (uint256 y = 0; y < k; ) {
-                /// Q - Is this if statement necessary
                 if (globalDelegationHashes[allGlobalHashes[y]].length > 0) {
-                    for (uint256 w = 0; w < globalDelegationHashes[allGlobalHashes[y]].length; ) {
-                        allDelegatorsAddresses[count2] = globalDelegationHashes[allGlobalHashes[y]][w].delegatorAddress;
-                        allExpirations[count2] = globalDelegationHashes[allGlobalHashes[y]][w].expiryDate;
-                        allTokens[count2] = globalDelegationHashes[allGlobalHashes[y]][w].allTokens;
-                        tokensIDs[count2] = globalDelegationHashes[allGlobalHashes[y]][w].tokens;
+                    for (
+                        uint256 w = 0;
+                        w < globalDelegationHashes[allGlobalHashes[y]].length;
+
+                    ) {
+                        allDelegatorsAddresses[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].delegatorAddress;
+                        allExpirations[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].expiryDate;
+                        allTokens[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].allTokens;
+                        tokensIDs[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].tokens;
                         count2 = count2 + 1;
 
                         unchecked {
@@ -1207,7 +1575,12 @@ contract DelegationManagementContract {
                     ++y;
                 }
             }
-            return (allDelegatorsAddresses, allExpirations, allTokens, tokensIDs);
+            return (
+                allDelegatorsAddresses,
+                allExpirations,
+                allTokens,
+                tokensIDs
+            );
         } else {
             address[] memory allDelegations1 = new address[](0);
             uint256[] memory tokensIDs = new uint256[](0);
@@ -1227,7 +1600,11 @@ contract DelegationManagementContract {
         uint256 _date,
         uint256 _useCase
     ) public view returns (address[] memory) {
-        address[] memory allDelegators = retrieveDelegators(_delegationAddress, _collectionAddress, _useCase);
+        address[] memory allDelegators = retrieveDelegators(
+            _delegationAddress,
+            _collectionAddress,
+            _useCase
+        );
         bytes32 globalHash;
         bytes32[] memory allGlobalHashes = new bytes32[](allDelegators.length);
         uint256 count1 = 0;
@@ -1236,7 +1613,14 @@ contract DelegationManagementContract {
         uint256 k = 0;
         if (allDelegators.length > 0) {
             for (uint256 i = 0; i < allDelegators.length; ) {
-                globalHash = keccak256(abi.encodePacked(allDelegators[i], _collectionAddress, _delegationAddress, _useCase));
+                globalHash = keccak256(
+                    abi.encodePacked(
+                        allDelegators[i],
+                        _collectionAddress,
+                        _delegationAddress,
+                        _useCase
+                    )
+                );
                 allGlobalHashes[count1] = globalHash;
                 count1 = count1 + 1;
 
@@ -1271,11 +1655,18 @@ contract DelegationManagementContract {
             address[] memory allDelegatorsAddresses = new address[](k);
             uint256[] memory allExpirations = new uint256[](k);
             for (uint256 y = 0; y < k; ) {
-                /// Q - Is this if statement necessary
                 if (globalDelegationHashes[allGlobalHashes[y]].length > 0) {
-                    for (uint256 w = 0; w < globalDelegationHashes[allGlobalHashes[y]].length; ) {
-                        allDelegatorsAddresses[count2] = globalDelegationHashes[allGlobalHashes[y]][w].delegatorAddress;
-                        allExpirations[count2] = globalDelegationHashes[allGlobalHashes[y]][w].expiryDate;
+                    for (
+                        uint256 w = 0;
+                        w < globalDelegationHashes[allGlobalHashes[y]].length;
+
+                    ) {
+                        allDelegatorsAddresses[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].delegatorAddress;
+                        allExpirations[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].expiryDate;
                         count2 = count2 + 1;
 
                         unchecked {
@@ -1315,15 +1706,26 @@ contract DelegationManagementContract {
         address _collectionAddress,
         uint256 _useCase
     ) public view returns (address) {
-        address[] memory allDelegators = retrieveDelegators(_delegationAddress, _collectionAddress, _useCase);
+        address[] memory allDelegators = retrieveDelegators(
+            _delegationAddress,
+            _collectionAddress,
+            _useCase
+        );
         bytes32 globalHash;
         bytes32[] memory allGlobalHashes = new bytes32[](allDelegators.length);
-        uint256 count1 = 0; /// @nit - Isn't this variable redundant?
+        uint256 count1 = 0;
         uint256 count2 = 0;
         uint256 k = 0;
         if (allDelegators.length > 0) {
             for (uint256 i = 0; i < allDelegators.length; ) {
-                globalHash = keccak256(abi.encodePacked(allDelegators[i], _collectionAddress, _delegationAddress, _useCase));
+                globalHash = keccak256(
+                    abi.encodePacked(
+                        allDelegators[i],
+                        _collectionAddress,
+                        _delegationAddress,
+                        _useCase
+                    )
+                );
                 allGlobalHashes[count1] = globalHash;
                 count1 = count1 + 1;
 
@@ -1358,11 +1760,18 @@ contract DelegationManagementContract {
             address[] memory allDelegatorsAddresses = new address[](k);
             uint256[] memory allRegistrations = new uint256[](k);
             for (uint256 y = 0; y < k; ) {
-                /// Q - Is this if statement necessary
                 if (globalDelegationHashes[allGlobalHashes[y]].length > 0) {
-                    for (uint256 w = 0; w < globalDelegationHashes[allGlobalHashes[y]].length; ) {
-                        allDelegatorsAddresses[count2] = globalDelegationHashes[allGlobalHashes[y]][w].delegatorAddress;
-                        allRegistrations[count2] = globalDelegationHashes[allGlobalHashes[y]][w].registeredDate;
+                    for (
+                        uint256 w = 0;
+                        w < globalDelegationHashes[allGlobalHashes[y]].length;
+
+                    ) {
+                        allDelegatorsAddresses[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].delegatorAddress;
+                        allRegistrations[count2] = globalDelegationHashes[
+                            allGlobalHashes[y]
+                        ][w].registeredDate;
                         count2 = count2 + 1;
 
                         unchecked {
@@ -1397,7 +1806,11 @@ contract DelegationManagementContract {
      * @notice This function checks the Consolidation status between 2 addresses
      */
 
-    function checkConsolidationStatus(address _wallet1, address _wallet2, address _collectionAddress) public view returns (bool) {
+    function checkConsolidationStatus(
+        address _wallet1,
+        address _wallet2,
+        address _collectionAddress
+    ) public view returns (bool) {
         bool wallet1HasWallet2Consolidation = retrieveGlobalStatusOfDelegation(
             _wallet1,
             _collectionAddress,
@@ -1411,27 +1824,86 @@ contract DelegationManagementContract {
             USE_CASE_CONSOLIDATION
         );
         bool wallet1HasWallet2ConsolidationAll = retrieveGlobalStatusOfDelegation(
-            _wallet1,
-            ALL_COLLECTIONS,
-            _wallet2,
-            USE_CASE_CONSOLIDATION
-        );
+                _wallet1,
+                ALL_COLLECTIONS,
+                _wallet2,
+                USE_CASE_CONSOLIDATION
+            );
         bool wallet2HasWallet1ConsolidationAll = retrieveGlobalStatusOfDelegation(
-            _wallet2,
-            ALL_COLLECTIONS,
-            _wallet1,
-            USE_CASE_CONSOLIDATION
-        );
-        if (wallet1HasWallet2Consolidation == true && wallet2HasWallet1Consolidation == true) {
+                _wallet2,
+                ALL_COLLECTIONS,
+                _wallet1,
+                USE_CASE_CONSOLIDATION
+            );
+        if (
+            wallet1HasWallet2Consolidation == true &&
+            wallet2HasWallet1Consolidation == true
+        ) {
             return true;
-        } else if (wallet1HasWallet2Consolidation == true && wallet2HasWallet1ConsolidationAll == true) {
+        } else if (
+            wallet1HasWallet2Consolidation == true &&
+            wallet2HasWallet1ConsolidationAll == true
+        ) {
             return true;
-        } else if (wallet2HasWallet1Consolidation == true && wallet1HasWallet2ConsolidationAll == true) {
+        } else if (
+            wallet2HasWallet1Consolidation == true &&
+            wallet1HasWallet2ConsolidationAll == true
+        ) {
             return true;
-        } else if (wallet1HasWallet2ConsolidationAll == true && wallet2HasWallet1ConsolidationAll == true) {
+        } else if (
+            wallet1HasWallet2ConsolidationAll == true &&
+            wallet2HasWallet1ConsolidationAll == true
+        ) {
             return true;
         } else {
             return false;
         }
+    }
+
+    /**
+     * UNSAFE FUNCTION FOR EXAMPLE USE ONLY
+     *
+     * In this example, we have added a function that lets someone add a global delegation.
+     * There is a pretty simple vulnerability here, as we are not reverting when the msg.sender is not the delegator.
+     * And so an exploiter can call this function to set up a global delegation for someone else.
+     * In this scinerio, the fake data will be stored in default bytes32 location.
+     * Lucky for the exploiter every retrieve delegation/delegator function
+     * that removes duplicates from its array of `allGlobalHashes` using the `delete` operator
+     * will read from the default bytes32 location if one duplicate is deleted.
+     *
+     * So in the exploiters case, they can call this function to set up a global delegation with the delegator address being the target
+     * and the delegation address being the exploiter's address.
+     * Then any platorm that uses this contract as a sorce of truth will think that the target has delegated to the exploiter.
+     *
+     *
+     * ----This function is only here to demonstrate the vulnerability. It should NOT be used outside of testing.----
+     */
+    function vulnerableAddGlobalDelegation(
+        address delegator,
+        address delegation,
+        uint256 expiryDate,
+        uint256 useCase
+    ) external {
+        bytes32 globalHash;
+        bytes32 delegatorHash;
+        GlobalData memory data = GlobalData(
+            delegator,
+            delegation,
+            block.timestamp,
+            expiryDate,
+            true,
+            1
+        );
+
+        delegatorHash = keccak256(
+            abi.encodePacked(data.delegatorAddress, ALL_COLLECTIONS, useCase)
+        );
+        delegatorHashes[delegatorHash].push(data.delegationAddress);
+        globalDelegationHashes[globalHash].push(data);
+    }
+
+    function returnDefaultData() external view returns (GlobalData[] memory) {
+        bytes32 defaultData;
+        return globalDelegationHashes[defaultData];
     }
 }
